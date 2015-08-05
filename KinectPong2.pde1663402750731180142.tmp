@@ -1,0 +1,385 @@
+/* --------------------------------------------------------------------------
+ * SimpleOpenNI Hands3d Test
+ * --------------------------------------------------------------------------
+ * Processing Wrapper for the OpenNI/Kinect 2 library
+ * http://code.google.com/p/simple-openni
+ * --------------------------------------------------------------------------
+ * prog:  Max Rheiner / Interaction Design / Zhdk / http://iad.zhdk.ch/
+ * date:  12/12/2012 (m/d/y)
+ * ----------------------------------------------------------------------------
+ * This demos shows how to use the gesture/hand generator.
+ * It's not the most reliable yet, a two hands example will follow
+ * ----------------------------------------------------------------------------
+ */
+
+//KINECT 
+import java.util.Map;
+import java.util.Iterator;
+
+import SimpleOpenNI.*;
+
+SimpleOpenNI context;
+//float        zoomF =0.5f;
+float        rotX = radians(180);  // by default rotate the hole scene 180deg around the x-axis, 
+// the data from openni comes upside down
+float        rotY = radians(0);
+int          handVecListSize = 30;
+Map<Integer, ArrayList<PVector>>  handPathList = new HashMap<Integer, ArrayList<PVector>>();
+color[]       userClr = new color[] { 
+  color(255, 0, 0), 
+  color(0, 255, 0), 
+  color(0, 0, 255), 
+  color(255, 255, 0), 
+  color(255, 0, 255), 
+  color(0, 255, 255)
+};
+
+//MINIM
+import ddf.minim.*;
+import ddf.minim.ugens.*;
+
+AudioPlayer player;
+AudioPlayer player2;
+AudioPlayer player3;
+AudioPlayer player4;
+AudioPlayer player5;
+AudioPlayer playerGameOver;
+Minim       minim;
+AudioOutput out;
+Oscil       wave;
+
+
+//PONG
+float cursor_size = 15;
+float object_size = 60;
+float table_size = 1024;
+float scale_factor = 1;
+PFont font;
+int base=40;
+int x, y, gameScore=0;
+int changeX=-10;
+int changeY=-10;
+int x2, y2, base2=40;
+int changeX2=-5;
+int changeY2=-5;
+int gameOverOne=0;
+int gameOverTwo=0;
+int x_invertido = 0;
+int x_invertido2 = 0;
+PImage bg;
+int enabled=1;
+
+int gameOverBallOne=0;
+int gameOverBallTwo=1;
+
+
+void setup()
+{
+  //PONG
+  size(1024, 768);
+  bg = loadImage("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Code\\Processing\\KinectPong\\pongbg.jpg");
+  x=(int)random(width);
+  y=height-base;
+  x2=300;
+  y2=height-base;
+
+  //KINECT
+  context = new SimpleOpenNI(this);
+  if (context.isInit() == false)
+  {
+    println("Can't init SimpleOpenNI, maybe the camera is not connected!"); 
+    exit();
+    return;
+  }
+
+  // disable mirror
+  context.setMirror(false);
+
+  // enable depthMap generation 
+  context.enableDepth();
+
+  // enable hands + gesture generation
+  context.enableHand();
+  context.startGesture(SimpleOpenNI.GESTURE_WAVE);
+  // enable skeleton generation for all joints
+  context.enableUser();
+  // set how smooth the hand capturing should be
+  //context.setSmoothingHands(.5);
+
+  stroke(255, 255, 255);
+  smooth();
+  perspective(radians(45), 
+  float(width)/float(height), 
+  10.0f, 150000.0f);
+
+  //MINIM
+  minim = new Minim(this);
+  //out = minim.getLineOut();
+  //out.mute();
+
+  // create a sine wave Oscil, set to 440 Hz, at 0.5 amplitude
+  //wave = new Oscil( 440, 0.5f, Waves.SINE );
+  // patch the Oscil to the output
+  //wave.patch( out );
+  player = minim.loadFile("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Audios\\ping_pong_8bit_beeep.mp3");
+  playerGameOver = minim.loadFile("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Audios\\gameover.wav");
+  player2 = minim.loadFile("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Audios\\successful.mp3");
+  player3= minim.loadFile("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Audios\\achievement.mp3");
+  player4= minim.loadFile("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Audios\\gotitem.mp3");
+  player5= minim.loadFile("C:\\Users\\oliveirae\\Dropbox\\PlayableCesar\\Audios\\levelcompleted.wav");
+}
+void draw()
+{
+  context.update();
+  //background(0, 0, 0);
+  background(bg);
+
+  // set the scene pos
+  translate(width/2, height/2, 0);
+  rotateX(rotX);
+  rotateY(rotY);
+  //scale(zoomF);
+
+  // draw the 3d point depth map
+  int[]   depthMap = context.depthMap();
+  int     steps   = 10;  // to speed up the drawing, draw every third point
+  int     index;
+  PVector realWorldPoint;
+  int[]   userMap = context.userMap();
+  translate(0, 0, -1000);  // set the rotation center of the scene 1000 infront of the camera
+
+
+
+  //background(255);
+  //textFont(font, 18*scale_factor);
+  float obj_size = object_size*scale_factor; 
+  float cur_size = cursor_size*scale_factor; 
+
+  // draw the tracked hands
+  if (handPathList.size() > 0)  
+  {    
+    Iterator itr = handPathList.entrySet().iterator();     
+    while (itr.hasNext ())
+    {
+      Map.Entry mapEntry = (Map.Entry)itr.next(); 
+      int handId =  (Integer)mapEntry.getKey();
+      ArrayList<PVector> vecList = (ArrayList<PVector>)mapEntry.getValue();
+      PVector p;
+
+      pushStyle();
+      stroke(userClr[ (handId - 1) % userClr.length ]);
+      noFill();           
+      Iterator itrVec = vecList.iterator(); 
+      beginShape();
+      while ( itrVec.hasNext () ) 
+      { 
+        p = (PVector) itrVec.next(); 
+        vertex(p.x, p.y, p.z);
+      }
+      endShape();   
+
+      stroke(userClr[ (handId - 1) % userClr.length ]);
+      strokeWeight(4);
+      p = vecList.get(0);
+      point(p.x, p.y, p.z);
+      popStyle(); 
+      text("SCORE:"+gameScore+"00", width/2-50, height-100);
+      int x = round(p.x*2);
+      x_invertido = (x);
+      int x2 = round(p.x*2);
+      x_invertido2 = (x2);
+    }
+  }
+
+  jogabilidade();
+  jogabilidade2();
+}
+void gameOverSplashOne()
+{
+    gameOverOne=1;
+}
+void gameOverSplashTwo()
+{
+    gameOverTwo=1;
+}
+void jogabilidade() {
+  if (gameOverOne==0)
+  {
+    //background(255);
+    background(bg);
+    //fill(0); 
+    text("SCORE:"+gameScore+"00", width/2-50, height-100);
+    rect(x_invertido, height-base, 200, base);
+    ellipse(x, y, 20, 20);
+    x=x+changeX;
+    y=y+changeY;
+    if (x<0 | x>width)
+    {
+      changeX=-changeX;
+    }
+    if (y<0)
+    {
+      changeY=-changeY;
+    }
+    if (y>height-base)
+    {
+      //check whether it is falling inside the rectangle or not
+      if (x > x_invertido && x < x_invertido +200)
+      {
+        changeY=-changeY; //bounce back
+        gameScore++;
+        player.play();
+        if (gameScore == 5) {
+          player2.play();
+          changeX=-13;
+          changeY=-13;
+          enabled=0;
+          gameOverTwo=0;
+          gameOverBallTwo=0;
+          jogabilidade2();
+        } else if (gameScore == 10) {
+          player3.play();
+          changeX=-15;
+          changeY=-15;
+        } else if (gameScore == 15) {
+          player4.play();
+          changeX=-17;
+          changeY=-17;
+        } else if (gameScore == 20) {
+          player5.play();
+          changeX=-32;
+          changeY=-32;
+        }
+      } else
+      {
+        gameOverSplashOne();
+        changeX2=-28;
+        changeY2=-28;
+      }
+    }
+  } else
+  {
+    gameOverBallOne=1;
+    if (gameOverBallTwo==1) {
+      playerGameOver.play();
+      //background(100, 100, 200);
+      text("Game Over!", width/2-150, height-100);
+      text("Remove your hand from Kinect Sensor and try again to restart", width/2-150, height-80);
+      gameOverSplashTwo();
+    }
+  }
+}
+
+void jogabilidade2() {
+  if (enabled==0) {
+    if (gameOverTwo==0)
+    {
+      //background(255);
+      //background(bg);
+      //fill(0); 
+      //text("SCORE:"+gameScore+"00", width/2-50, height-100);
+      rect(x_invertido2, height-base, 200, base);
+      ellipse(x2, y2, 20, 20);
+      x2=x2+changeX2;
+      y2=y2+changeY2;
+      if (x2<0 | x2>width)
+      {
+        changeX2=-changeX2;
+      }
+      if (y2<0)
+      {
+        changeY2=-changeY2;
+      }
+      if (y2>height-base2)
+      {
+        //check whether it is falling inside the rectangle or not
+        if (x2 > x_invertido2 && x2 < x_invertido2 +200)
+        {
+          changeY2=-changeY2; //bounce back
+          gameScore++;
+        } else
+        {
+          gameOverSplashTwo();
+        }
+      }
+    } else
+    {
+      gameOverBallTwo=1;
+      if (gameOverBallOne==1) {
+        playerGameOver.play();
+        //background(100, 100, 200);
+        text("Game Over!", width/2-150, height-100);
+        text("Remove your hand from Kinect Sensor and try again to restart", width/2-150, height-80);
+        gameOverSplashOne();
+      }
+    }
+  }
+}
+
+//KINECT METHODS
+void onNewHand(SimpleOpenNI curContext, int handId, PVector pos)
+{
+  println("onNewHand - handId: " + handId + ", pos: " + pos);
+
+  ArrayList<PVector> vecList = new ArrayList<PVector>();
+  vecList.add(pos);
+
+  handPathList.put(handId, vecList);
+
+  if (gameOverOne!=0 && gameOverTwo!=0) {
+    changeY=-changeY;
+    changeY2=-changeY2;
+    gameScore=0;
+    gameOverOne=0;
+    gameOverTwo=1;
+    gameOverBallOne=0;
+    gameOverBallTwo=1;
+  }
+
+  jogabilidade();
+}
+
+void onTrackedHand(SimpleOpenNI curContext, int handId, PVector pos)
+{
+  //println("onTrackedHand - handId: " + handId + ", pos: " + pos );
+  //out.unmute();
+  //line(mouseX, mouseY, pmouseX, pmouseY);
+  //float[] f = pos.array();
+  //float amp = map(f[0], 0, height, 1, 0 );
+  //wave.setAmplitude( amp );
+
+  //float freq = map(f[0], 0, width, 110, 880 );
+  //wave.setFrequency( freq );
+  ArrayList<PVector> vecList = handPathList.get(handId);
+  if (vecList != null)
+  {
+    vecList.add(0, pos);
+    if (vecList.size() >= handVecListSize)
+      // remove the last point 
+      vecList.remove(vecList.size()-1);
+  }
+}
+
+void onLostHand(SimpleOpenNI curContext, int handId)
+{
+  //out.mute();
+  println("onLostHand - handId: " + handId);
+
+  handPathList.remove(handId);
+}
+
+// -----------------------------------------------------------------
+// gesture events
+
+void onCompletedGesture(SimpleOpenNI curContext, int gestureType, PVector pos)
+{
+  println("onCompletedGesture - gestureType: " + gestureType + ", pos: " + pos);
+
+  context.startTrackingHand(pos);
+
+  int handId = context.startTrackingHand(pos);
+  println("hand stracked: " + handId);
+}
+
+// -----------------------------------------------------------------
+
